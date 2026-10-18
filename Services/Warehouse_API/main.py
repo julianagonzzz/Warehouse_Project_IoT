@@ -1,8 +1,12 @@
+import logging
 from fastapi import FastAPI
 from app.database import engine, Base
 from app.modules.health.health_controller import router as health_controller
 from app.modules.products.products_controller import router as products_controller
 from app.modules.inventory.inventory_controller import router as inventory_controller
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("pika").setLevel(logging.WARNING)
 
 Base.metadata.create_all(bind=engine)
 

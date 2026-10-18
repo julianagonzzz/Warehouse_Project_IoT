@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from app.modules.inventory.schemas import MovementCreate
+from app.modules.inventory.schemas import MovementCreate, InventoryResponse
 from app.modules.inventory.inventory_repository import InventoryRepository
 from app.messaging.rabbitmq_publisher import publish_event
+from app.cache.redis_cache import cache_get, cache_set, cache_delete, inventory_key
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,24 @@ class InventoryService:
         # Método expuesto de forma segura para otros servicios del monolito
         self.repo.initialize_inventory(product_id)
 
-    def get_stock(self, product_id: int):
+    def get_stock(self, product_id: int) -> InventoryResponse:
+        # Cache Aside: 1) buscar en Redis
+        key = inventory_key(product_id)
+        cached = cache_get(key)
+        if cached:
+            logger.info("CACHE HIT %s", key)
+            return InventoryResponse.model_validate_json(cached)
+
+        # 2) MISS (o Redis caído): leer la fuente de verdad
+        logger.info("CACHE MISS %s", key)
         inventory = self.repo.get_by_product(product_id)
         if not inventory:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventario no encontrado")
-        return inventory
+
+        # 3) Guardar en Redis con TTL para las próximas lecturas
+        response = InventoryResponse.model_validate(inventory)
+        cache_set(key, response.model_dump_json())
+        return response
 
     def process_movement(self, movement_in: MovementCreate):
         try:
@@ -75,6 +89,10 @@ class InventoryService:
             if isinstance(e, HTTPException):
                 raise e
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        # Invalidar el caché DESPUÉS del commit: el próximo GET será un MISS
+        # y traerá el valor nuevo desde PostgreSQL.
+        cache_delete(inventory_key(movement.product_id))
 
         # 5. Publicar el evento DESPUÉS del commit. Si RabbitMQ falla, el movimiento
         #    ya está guardado y no se pierde; solo se registra el error.
