@@ -1,0 +1,42 @@
+services:
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: warehouse_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: warehouse_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - warehouse_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  warehouse_api:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: warehouse_api_node
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres_db:5432/warehouse_db
+      - WAREHOUSE_ID=WH-001
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - warehouse_net
+
+volumes:
+  postgres_data:
+
+networks:
+  warehouse_net:
+    driver: bridge

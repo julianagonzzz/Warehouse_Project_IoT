@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# Entorno virtual
+.venv/
+venv/
+
+# Variables de entorno (pueden tener contraseñas)
+.env
+
+# Editor y sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Tests
+.pytest_cache/
+.coverage
