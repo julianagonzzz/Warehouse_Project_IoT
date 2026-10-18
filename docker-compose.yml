@@ -1,60 +1,178 @@
 services:
-  postgres_db:
+  # El enunciado exige que, cada BODEGAA sea independiente,
+  # Esto que significa, que tendrá su propia base de datos Postgre, 
+  # Su propia base de datos para la caché de REDIS
+  # y su propia API.
+
+  # ═══════════════════════ BODEGA WH-001 ═══════════════════════
+  wh001_postgres:
     image: postgres:15-alpine
-    container_name: warehouse_postgres
+    container_name: wh001_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: warehouse_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pg_wh001:/var/lib/postgresql/data
     networks:
-      - warehouse_net
+      - net_wh001
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  warehouse_api:
-    build:
-      context: ./Services/Warehouse_API
-      dockerfile: Dockerfile
-    container_name: warehouse_api_node
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres_db:5432/warehouse_db
-      - WAREHOUSE_ID=WH-001
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=warehouse
-      - RABBITMQ_PASSWORD=warehouse_dev
-      - REDIS_URL=redis://redis:6379/0
-      - CACHE_TTL_SECONDS=30
-      - CACHE_ENABLED=true
-    depends_on:
-      postgres_db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - warehouse_net
-
-  redis:
+  wh001_redis:
     image: redis:7-alpine
-    container_name: warehouse_redis
-    ports:
-      - "6379:6379"
+    container_name: wh001_redis
     networks:
-      - warehouse_net
+      - net_wh001
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
 
+  wh001_api:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: wh001_api
+    ports:
+      - "8001:8000"
+    environment:
+      - WAREHOUSE_ID=WH-001
+      - DATABASE_URL=postgresql://postgres:postgres@wh001_postgres:5432/warehouse_db
+      - REDIS_URL=redis://wh001_redis:6379/0
+      - CACHE_TTL_SECONDS=30
+      - CACHE_ENABLED=true
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=warehouse
+      - RABBITMQ_PASSWORD=warehouse_dev
+    depends_on:
+      wh001_postgres:
+        condition: service_healthy
+      wh001_redis:
+        condition: service_healthy
+    networks:
+      - net_wh001
+      - shared_net
+
+  # ═══════════════════════ BODEGA WH-002 ═══════════════════════
+  wh002_postgres:
+    image: postgres:15-alpine
+    container_name: wh002_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: warehouse_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_wh002:/var/lib/postgresql/data
+    networks:
+      - net_wh002
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  wh002_redis:
+    image: redis:7-alpine
+    container_name: wh002_redis
+    networks:
+      - net_wh002
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  wh002_api:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: wh002_api
+    ports:
+      - "8002:8000"
+    environment:
+      - WAREHOUSE_ID=WH-002
+      - DATABASE_URL=postgresql://postgres:postgres@wh002_postgres:5432/warehouse_db
+      - REDIS_URL=redis://wh002_redis:6379/0
+      - CACHE_TTL_SECONDS=30
+      - CACHE_ENABLED=true
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=warehouse
+      - RABBITMQ_PASSWORD=warehouse_dev
+    depends_on:
+      wh002_postgres:
+        condition: service_healthy
+      wh002_redis:
+        condition: service_healthy
+    networks:
+      - net_wh002
+      - shared_net
+
+  # ═══════════════════════ BODEGA WH-003 ═══════════════════════
+  wh003_postgres:
+    image: postgres:15-alpine
+    container_name: wh003_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: warehouse_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_wh003:/var/lib/postgresql/data
+    networks:
+      - net_wh003
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  wh003_redis:
+    image: redis:7-alpine
+    container_name: wh003_redis
+    networks:
+      - net_wh003
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  wh003_api:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: wh003_api
+    ports:
+      - "8003:8000"
+    environment:
+      - WAREHOUSE_ID=WH-003
+      - DATABASE_URL=postgresql://postgres:postgres@wh003_postgres:5432/warehouse_db
+      - REDIS_URL=redis://wh003_redis:6379/0
+      - CACHE_TTL_SECONDS=30
+      - CACHE_ENABLED=true
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=warehouse
+      - RABBITMQ_PASSWORD=warehouse_dev
+    depends_on:
+      wh003_postgres:
+        condition: service_healthy
+      wh003_redis:
+        condition: service_healthy
+    networks:
+      - net_wh003
+      - shared_net
+
+  # ═══════════════════════ COMPARTIDO ═══════════════════════
   rabbitmq:
     image: rabbitmq:3-management
     container_name: warehouse_rabbitmq
@@ -67,7 +185,7 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      - warehouse_net
+      - shared_net
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 5s
@@ -88,12 +206,16 @@ services:
       rabbitmq:
         condition: service_healthy
     networks:
-      - warehouse_net
+      - shared_net
 
 volumes:
-  postgres_data:
+  pg_wh001:
+  pg_wh002:
+  pg_wh003:
   rabbitmq_data:
 
 networks:
-  warehouse_net:
-    driver: bridge
+  net_wh001:
+  net_wh002:
+  net_wh003:
+  shared_net:
