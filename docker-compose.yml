@@ -28,14 +28,53 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres_db:5432/warehouse_db
       - WAREHOUSE_ID=WH-001
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=warehouse
+      - RABBITMQ_PASSWORD=warehouse_dev
     depends_on:
       postgres_db:
+        condition: service_healthy
+    networks:
+      - warehouse_net
+  
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: warehouse_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: warehouse
+      RABBITMQ_DEFAULT_PASS: warehouse_dev
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - warehouse_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  
+  inventory_worker:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: warehouse_inventory_worker
+    command: ["python", "-m", "app.workers.inventory_worker"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: warehouse
+      RABBITMQ_PASSWORD: warehouse_dev
+    depends_on:
+      rabbitmq:
         condition: service_healthy
     networks:
       - warehouse_net
 
 volumes:
   postgres_data:
+  rabbitmq_data:
 
 networks:
   warehouse_net:

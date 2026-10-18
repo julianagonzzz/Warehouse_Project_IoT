@@ -1,7 +1,14 @@
+import logging
+from datetime import datetime, timezone
+from uuid import uuid4
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.modules.inventory.schemas import MovementCreate
 from app.modules.inventory.inventory_repository import InventoryRepository
+from app.messaging.rabbitmq_publisher import publish_event
+
+logger = logging.getLogger(__name__)
+
 
 class InventoryService:
     def __init__(self, db: Session):
@@ -62,13 +69,30 @@ class InventoryService:
             
             # 4. Control de Transacción centralizado en el Servicio
             self.db.commit()
-            return movement
-
+            self.db.refresh(movement)
         except Exception as e:
             self.db.rollback()
             if isinstance(e, HTTPException):
                 raise e
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        # 5. Publicar el evento DESPUÉS del commit. Si RabbitMQ falla, el movimiento
+        #    ya está guardado y no se pierde; solo se registra el error.
+        try:
+            publish_event({
+                "event_id": str(uuid4()),
+                "event_type": "INVENTORY_MOVEMENT_CREATED",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "movement_id": movement.id,
+                "product_id": movement.product_id,
+                "warehouse_id": movement.warehouse_id,
+                "movement_type": movement.type,
+                "quantity": movement.quantity,
+                "reference": movement.reference,
+            })
+        except Exception:
+            logger.exception("No se pudo publicar el evento en RabbitMQ")
+        return movement
 
     def get_movements(self, product_id: int):
         return self.repo.get_movements_by_product(product_id)
