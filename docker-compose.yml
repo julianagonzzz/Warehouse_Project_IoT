@@ -1,8 +1,4 @@
 services:
-  # El enunciado exige que, cada BODEGAA sea independiente,
-  # Esto que significa, que tendrá su propia base de datos Postgre, 
-  # Su propia base de datos para la caché de REDIS
-  # y su propia API.
 
   # ═══════════════════════ BODEGA WH-001 ═══════════════════════
   wh001_postgres:
@@ -91,13 +87,14 @@ services:
       timeout: 3s
       retries: 5
 
-  wh002_api:
+  # 3 instancias de la MISMA API, sin puertos propios:
+  # solo se llega a ellas a través del load balancer.
+  wh002_api_1:
     build:
       context: ./Services/Warehouse_API
       dockerfile: Dockerfile
-    container_name: wh002_api
-    ports:
-      - "8002:8000"
+    container_name: wh002_api_1
+    restart: on-failure
     environment:
       - WAREHOUSE_ID=WH-002
       - DATABASE_URL=postgresql://postgres:postgres@wh002_postgres:5432/warehouse_db
@@ -115,6 +112,69 @@ services:
     networks:
       - net_wh002
       - shared_net
+
+  wh002_api_2:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: wh002_api_2
+    restart: on-failure
+    environment:
+      - WAREHOUSE_ID=WH-002
+      - DATABASE_URL=postgresql://postgres:postgres@wh002_postgres:5432/warehouse_db
+      - REDIS_URL=redis://wh002_redis:6379/0
+      - CACHE_TTL_SECONDS=30
+      - CACHE_ENABLED=true
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=warehouse
+      - RABBITMQ_PASSWORD=warehouse_dev
+    depends_on:
+      wh002_postgres:
+        condition: service_healthy
+      wh002_redis:
+        condition: service_healthy
+    networks:
+      - net_wh002
+      - shared_net
+
+  wh002_api_3:
+    build:
+      context: ./Services/Warehouse_API
+      dockerfile: Dockerfile
+    container_name: wh002_api_3
+    restart: on-failure
+    environment:
+      - WAREHOUSE_ID=WH-002
+      - DATABASE_URL=postgresql://postgres:postgres@wh002_postgres:5432/warehouse_db
+      - REDIS_URL=redis://wh002_redis:6379/0
+      - CACHE_TTL_SECONDS=30
+      - CACHE_ENABLED=true
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=warehouse
+      - RABBITMQ_PASSWORD=warehouse_dev
+    depends_on:
+      wh002_postgres:
+        condition: service_healthy
+      wh002_redis:
+        condition: service_healthy
+    networks:
+      - net_wh002
+      - shared_net
+
+  wh002_lb:
+    image: haproxy:2.8-alpine
+    container_name: wh002_lb
+    ports:
+      - "8002:80" # la bodega WH-002 sigue respondiendo en el mismo puerto
+      - "8404:8404" # panel de estado del balanceador
+    volumes:
+      - ./infrastructure/haproxy/wh002.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - wh002_api_1
+      - wh002_api_2
+      - wh002_api_3
+    networks:
+      - net_wh002
 
   # ═══════════════════════ BODEGA WH-003 ═══════════════════════
   wh003_postgres:
@@ -219,3 +279,4 @@ networks:
   net_wh002:
   net_wh003:
   shared_net:
+
